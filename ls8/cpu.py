@@ -11,6 +11,14 @@ class CPU:
         self.ram = [0] * 256
         self.reg = [0] * 8
         self.pc = 0
+        self.commands = {
+            0b10000010: self.ldi,
+            0b01000111: self.prn,
+            0b10100000: self.add,
+            0b10100001: self.sub,
+            0b10100010: self.mul,
+            0b10100011: self.div,
+        }
 
     def load(self):
         """Load a program into memory."""
@@ -74,30 +82,37 @@ class CPU:
 
         print()
 
+    def ldi(self):
+        self.reg[self.ram_read(self.pc+1)] = self.ram_read(self.pc+2)
+        self.pc += 3
+
+    def prn(self):
+        print(self.reg[self.ram_read(self.pc+1)])
+        self.pc += 2
+
+    def add(self):
+        self.aluHandler('ADD')
+
+    def sub(self):
+        self.aluHandler('SUB')
+
+    def mul(self):
+        self.aluHandler('MUL')
+
+    def div(self):
+        self.aluHandler('DIV')
+
+    def aluHandler(self, action):
+        self.alu(action, self.ram_read(self.pc+1), self.ram_read(self.pc+2))
+        self.pc += 3
+
     def run(self):
         """Run the CPU."""
 
-        # program commands
-        ldi = 0b10000010
-        prn = 0b01000111
-        hlt = 0b00000001
-        mul = 0b10100010
-
-        while self.ram_read(self.pc) != hlt:
+        while self.ram_read(self.pc) != 0b00000001:
             instruction = self.ram_read(self.pc)
 
-            if instruction == ldi:
-                self.reg[self.ram_read(self.pc+1)] = self.ram_read(self.pc+2)
-                self.pc += 3
-
-            elif instruction == prn:
-                print(self.reg[self.ram_read(self.pc+1)])
-                self.pc += 2
-
-            elif instruction == mul:
-                self.alu('MUL', self.ram_read(self.pc+1),
-                         self.ram_read(self.pc+2))
-                self.pc += 3
-
-            else:
+            try:
+                self.commands[instruction]()
+            except Exception:
                 return print(f'Instruction {instruction} not found at {self.pc}')
