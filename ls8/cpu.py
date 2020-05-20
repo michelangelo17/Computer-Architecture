@@ -11,13 +11,16 @@ class CPU:
         self.ram = [0] * 256
         self.reg = [0] * 8
         self.pc = 0
+        self.reg[7] = 0xF4
+        self.pc_increase = 0
         self.commands = {
             0b10000010: self.ldi,
             0b01000111: self.prn,
-            0b10100000: self.add,
-            0b10100001: self.sub,
-            0b10100010: self.mul,
-            0b10100011: self.div,
+            0b00000000: self.nop,
+            0b01000101: self.push,
+            0b01000110: self.pop,
+            0b01010000: self.call,
+            0b00010001: self.ret,
         }
 
     def load(self):
@@ -26,17 +29,24 @@ class CPU:
         address = 0
 
         program = []
+        if len(sys.argv) == 2:
+            try:
+                with open(sys.argv[1]) as f:
+                    for line in f:
+                        line = line.partition('#')[0]
+                        line = line.rstrip()
 
-        with open(sys.argv[1]) as f:
-            for line in f:
-                line = line.partition('#')[0]
-                line = line.rstrip()
-                if line != '':
-                    program.append(int(line, 2))
+                        if line != '':
+                            program.append(int(line, 2))
 
-        for instruction in program:
-            self.ram[address] = instruction
-            address += 1
+            except FileNotFoundError as e:
+                print('\n', e, '\n')
+
+            for instruction in program:
+                self.ram[address] = instruction
+                address += 1
+        else:
+            return print('\nPlease include a file to load!\n')
 
     def ram_read(self, mar):
         return self.ram[mar]
@@ -47,72 +57,88 @@ class CPU:
     def alu(self, op, reg_a, reg_b):
         """ALU operations."""
 
-        if op == "ADD":
+        def add():
             self.reg[reg_a] += self.reg[reg_b]
 
-        elif op == "SUB":
+        def sub():
             self.reg[reg_a] -= self.reg[reg_b]
 
-        elif op == "MUL":
+        def mul():
             self.reg[reg_a] *= self.reg[reg_b]
 
-        elif op == "DIV":
+        def div():
             self.reg[reg_a] /= self.reg[reg_b]
 
-        else:
-            raise Exception("Unsupported ALU operation")
+        operations = {
+            0b10100000: add,
+            0b10100001: sub,
+            0b10100010: mul,
+            0b10100011: div,
+        }
 
-    def trace(self):
-        """
-        Handy function to print out the CPU state. You might want to call this
-        from run() if you need help debugging.
-        """
-
-        print(f"TRACE: %02X | %02X %02X %02X |" % (
-            self.pc,
-            # self.fl,
-            # self.ie,
-            self.ram_read(self.pc),
-            self.ram_read(self.pc + 1),
-            self.ram_read(self.pc + 2)
-        ), end='')
-
-        for i in range(8):
-            print(" %02X" % self.reg[i], end='')
-
-        print()
+        try:
+            operations[op]()
+        except KeyError:
+            print('\nUnsupported ALU operation\n')
 
     def ldi(self):
         self.reg[self.ram_read(self.pc+1)] = self.ram_read(self.pc+2)
-        self.pc += 3
 
     def prn(self):
         print(self.reg[self.ram_read(self.pc+1)])
-        self.pc += 2
 
-    def add(self):
-        self.aluHandler('ADD')
+    def nop(self):
+        pass
 
-    def sub(self):
-        self.aluHandler('SUB')
+    def push(self, address=None):
+        if address is None:
+            self.reg[7] -= 1
+            self.ram_write(self.reg[7], self.reg[self.ram_read(self.pc+1)])
+        else:
+            self.reg[7] -= 1
+            self.ram_write(self.reg[7], address)
 
-    def mul(self):
-        self.aluHandler('MUL')
+    def pop(self, ret=False):
+        if self.reg[7] == 0xF4:
+            return print('Stack is Empty!')
+        if ret:
+            pc = self.ram_read(self.reg[7])
+            self.reg[7] += 1
+            return pc
+        self.reg[self.ram_read(self.pc+1)] = self.ram_read(self.reg[7])
+        self.reg[7] += 1
 
-    def div(self):
-        self.aluHandler('DIV')
+    def call(self):
+        self.push(self.pc+2)
+        self.pc = self.reg[self.ram_read(self.pc+1)]
+        self.pc_increase = 0
 
-    def aluHandler(self, action):
-        self.alu(action, self.ram_read(self.pc+1), self.ram_read(self.pc+2))
-        self.pc += 3
+    def ret(self):
+        self.pc = self.pop(True)
+        self.pc_increase = 0
+
+    def checkAlu(self, instruction):
+        is_alu = (instruction & 0b00100000) >> 5
+
+        if is_alu == 1:
+            val1 = self.ram_read(self.pc+1)
+            val2 = self.ram_read(self.pc+2)
+            self.alu(instruction, val1, val2)
+            return 0b00000000
+
+        return instruction
 
     def run(self):
         """Run the CPU."""
 
-        while self.ram_read(self.pc) != 0b00000001:
+        while self.ram_read(self.pc) != 0b00000001 and self.pc < len(self.ram) - 1:
             instruction = self.ram_read(self.pc)
+            self.pc_increase = (instruction >> 6) + 1
+            instruction = self.checkAlu(instruction)
 
             try:
                 self.commands[instruction]()
-            except Exception:
-                return print(f'Instruction {instruction} not found at {self.pc}')
+                self.pc += self.pc_increase
+
+            except KeyError:
+                return print(f'\nInstruction {instruction} not found at {self.pc}\n')
