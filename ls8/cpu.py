@@ -16,8 +16,6 @@ class CPU:
     def load(self):
         """Load a program into memory."""
 
-        address = 0
-
         program = []
         if len(sys.argv) == 2:
             try:
@@ -32,7 +30,7 @@ class CPU:
             except FileNotFoundError as e:
                 print('\n', e, '\n')
 
-            for instruction in program:
+            for address, instruction in enumerate(program):
                 self.ram[address] = instruction
                 address += 1
         else:
