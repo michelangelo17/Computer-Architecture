@@ -249,16 +249,16 @@ class CPU:
             0b01011010: self.jge,
         }
 
-        start = time.time()
+        # start = time.time()
 
         while self.ram_read(self.pc) != commands['HALT'] and self.pc < 255:
             instruction = self.ram_read(self.pc)
             pc_increase = self.pc_inc_calc(instruction)
             instruction = self.checkAlu(instruction)
 
-            if time.time() - start >= 1:
-                print("ONE SECOND")
-                start = time.time()
+            # if time.time() - start >= 1:
+            #     print("ONE SECOND")
+            #     start = time.time()
 
             if instruction in conditionals:
                 if not conditionals[instruction]():
